@@ -1,4 +1,5 @@
 #!/bin/bash
+set -e
 
 # Add root crontask the following way:
 # # crontab -e

@@ -49,6 +49,7 @@
 #define SHRINK 16
 #define STATUS 32
 #define EXTRACT 64
+#define OVERWRITE 128
 
 
 int verbose = 0;
@@ -227,18 +228,16 @@ static int dump_database(apr_pool_t *pool, apr_sdbm_t *db, int action, char *new
 
     if (action & EXTRACT)
     {
-       
-        char *file_name = "/new_db";
-        int full_len = 1 + strlen(new_db_path) + strlen(file_name); 
-        char *full_path = (char *) malloc(full_len);
-        strcpy(full_path, new_db_path);
-        strcat(full_path, file_name);
-        full_path[full_len] = '\0';
+        apr_int32_t mode = APR_CREATE | APR_WRITE | APR_SHARELOCK;
+
+        if (action & OVERWRITE)
+        {
+            mode |= APR_TRUNCATE;
+        }
   
-        v("Exporting valid items to: %s.[pag,dir]...\n",full_path);
+        v("Exporting valid items to: %s.[pag,dir]...\n",new_db_path);
         
-        ret = apr_sdbm_open(&db_dest, full_path,
-                APR_CREATE | APR_WRITE | APR_SHARELOCK, 0x0777, pool);
+        ret = apr_sdbm_open(&db_dest, new_db_path, mode, 0x0777, pool);
 
         if (ret != APR_SUCCESS)
         {
@@ -338,7 +337,7 @@ static int dump_database(apr_pool_t *pool, apr_sdbm_t *db, int action, char *new
 end:
     if (action & EXTRACT)
     {
-        p("New database generated with valid keys at: %s/new_db\n", new_db_path);
+        p("New database generated with valid keys at: %s\n", new_db_path);
         apr_sdbm_close(db_dest);
     }
     if (action & SHRINK || action & STATUS)
@@ -374,7 +373,7 @@ void version (void) {
 
 void help (void) {
 
-    p("\n Usage: modsec-sdbm-util [nkxsdahVvurD] <database-name>\n\n");
+    p("\n Usage: modsec-sdbm-util [nokxsdahVvurDN] <database-name>\n\n");
 
     p("This utility was created in order to make easy the maintenance of the SDBM files\n");
     p("which stores ModSecurity persistent collections.\n\n");
@@ -382,9 +381,10 @@ void help (void) {
     p("  -k, shrink: Removes all the expired elements as long as others not well\n");
     p("\tformated items from the database.\n");
     p("  -n, new: Extract valid items of a database to a new one. Output will be:\n");
-    p("\t/tmp/new_db.[ip,pag] unless otherwise specified using the -D option.\n");
-    p("  -D, directory: Used with -n, expects to receive a directory path in which the\n");
-    p("\tthe resulting new_db.[ip,pag] files are placed.\n");
+    p("\t/tmp/new_db.[ip,pag] unless otherwise specified using the -N option.\n");
+    p("  -N, name: Used with -n, expects to receive a path in which the\n");
+    p("\tthe resulting database files are placed.\n");
+    p("  -o, overwrite: Used with -n, overwrite resulting file after extract.\n");
     p("  -s, status: Print information about the table, such us the amount of items,\n");
     p("\tamount of expired items and also the amount of malformed items that\n");
     p("\tmay be using space;\n");
@@ -405,7 +405,7 @@ int main (int argc, char **argv)
 {
     apr_pool_t *pool;
     char *to_remove = NULL;
-    char *new_db_path = strdup("/tmp");
+    char *new_db_path = strdup("/tmp/new_db");
     int index;
     int c;
     int action = 0;
@@ -416,7 +416,7 @@ int main (int argc, char **argv)
         return 0;
     }
 
-    while ((c = getopt (argc, argv, "nkxsdahVvur:D:")) != -1)
+    while ((c = getopt (argc, argv, "nokxsdahVvur:D:N:")) != -1)
     switch (c)
     {
         case 'd':
@@ -437,7 +437,10 @@ int main (int argc, char **argv)
         case 'n':
             action = action | EXTRACT;
             break;
-        case 'D':
+        case 'o':
+            action = action | OVERWRITE;
+            break;
+        case 'N':
             free(new_db_path);
             new_db_path = strdup(optarg);
             break;
@@ -482,18 +485,6 @@ int main (int argc, char **argv)
         int ret = 0;
         char *file = argv[index];
         apr_sdbm_t *db = NULL;
-        apr_dir_t *db_dest_dir;
-
-        // test to see if the target directory exists
-        printf ("Checking target directory: %s\n", new_db_path);
-        ret = apr_dir_open(&db_dest_dir, new_db_path, pool);
-        if (ret != APR_SUCCESS) {
-            char errmsg[120];
-            p("Could not open target directory %s: %s\n", new_db_path, apr_strerror(ret, errmsg, sizeof errmsg));
-            goto that_is_all_folks;
-        }
-        apr_dir_close(db_dest_dir);
-        printf("Target directory exists.\n");
 
         printf ("Opening file: %s\n", file);
         ret = open_sdbm(pool, &db, argv[index]);

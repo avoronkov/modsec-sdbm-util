@@ -15,6 +15,8 @@ fi
 basedir="$(dirname $0)"
 sdbm_util="${1:-$basedir/modsec-sdbm-util}"
 cached="${2:-/var/cache/modsecurity}"
+
+rm -f $cached/test.dir $cached/test.pag
 "$sdbm_util" -k $cached/ip -n -N $cached/test -o
 for ext in dir pag; do
         chown `stat -c '%U:%G' $cached/ip.$ext` $cached/test.$ext
